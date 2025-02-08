@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Barcode Scanner</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        #scanner-container {
+            position: relative;
+            max-width: 100%;
+            max-height: 70vh;
+            overflow: hidden;
+        }
+        #interactive.viewport {
+            position: relative;
+        }
+        #interactive.viewport > canvas, #interactive.viewport > video {
+            max-width: 100%;
+            width: 100%;
+        }
+        #interactive.viewport canvas.drawingBuffer, #interactive.viewport video.drawingBuffer {
+            position: absolute;
+            left: 0;
+            top: 0;
+        }
+        #scanner-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.3);
+            z-index: 10;
+        }
+        #scanner-overlay .laser {
+            position: absolute;
+            top: 40%;
+            bottom: 40%;
+            left: 10%;
+            right: 10%;
+            background: rgba(255, 255, 255, 0.5);
+            z-index: 11;
+            border: 2px solid #fff;
+        }
+        #result {
+            margin-top: 20px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        #scan-button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #scan-button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <h1>Enhanced Barcode Scanner</h1>
+    <div id="scanner-container">
+        <div id="interactive" class="viewport"></div>
+        <div id="scanner-overlay">
+            <div class="laser"></div>
+        </div>
+    </div>
+    <div id="result">Ready to scan</div>
+    <button id="scan-button">Start Scanning</button>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+    <script>
+        let scanning = false;
+        const scanButton = document.getElementById('scan-button');
+        const resultDiv = document.getElementById('result');
+
+        function startScanning() {
+            Quagga.init({
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: document.querySelector("#interactive"),
+                    constraints: {
+                        width: { min: 640 },
+                        height: { min: 480 },
+                        aspectRatio: { min: 1, max: 2 },
+                        facingMode: "environment"
+                    },
+                    area: { // defines rectangle of the detection
+                        top: "20%",
+                        right: "20%",
+                        left: "20%",
+                        bottom: "20%"
+                    },
+                },
+                locator: {
+                    patchSize: "medium",
+                    halfSample: true
+                },
+                numOfWorkers: navigator.hardwareConcurrency || 4,
+                decoder: {
+                    readers: [
+                        "ean_reader",
+                        "ean_8_reader",
+                        "code_128_reader",
+                        "code_39_reader",
+                        "code_39_vin_reader",
+                        "codabar_reader",
+                        "upc_reader",
+                        "upc_e_reader"
+                    ],
+                    multiple: false // restricts to one barcode
+                },
+                locate: true
+            }, function(err) {
+                if (err) {
+                    console.error(err);
+                    resultDiv.textContent = "Error starting scanner: " + err.message;
+                    return;
+                }
+                console.log("Initialization finished. Ready to start");
+                Quagga.start();
+                scanning = true;
+                scanButton.textContent = 'Stop Scanning';
+            });
+
+            Quagga.onDetected(function(result) {
+                if (result && result.codeResult && result.codeResult.code) {
+                    const code = result.codeResult.code;
+                    resultDiv.textContent = "Barcode: " + code;
+                    stopScanning(); // Stops scanning after detection
+                }
+            });
+
+            Quagga.onProcessed(function(result) {
+                var drawingCtx = Quagga.canvas.ctx.overlay,
+                    drawingCanvas = Quagga.canvas.dom.overlay;
+
+                if (result) {
+                    if (result.boxes) {
+                        drawingCtx.clearRect(0, 0, parseInt(drawingCanvas.getAttribute("width")), parseInt(drawingCanvas.getAttribute("height")));
+                        result.boxes.filter(function (box) {
+                            return box !== result.box;
+                        }).forEach(function (box) {
+                            Quagga.ImageDebug.drawPath(box, {x: 0, y: 1}, drawingCtx, {color: "green", lineWidth: 2});
+                        });
+                    }
+
+                    if (result.box) {
+                        Quagga.ImageDebug.drawPath(result.box, {x: 0, y: 1}, drawingCtx, {color: "#00F", lineWidth: 2});
+                    }
+
+                    if (result.codeResult && result.codeResult.code) {
+                        Quagga.ImageDebug.drawPath(result.line, {x: 'x', y: 'y'}, drawingCtx, {color: 'red', lineWidth: 3});
+                    }
+                }
+            });
+        }
+
+        function stopScanning() {
+            Quagga.stop();
+            scanning = false;
+            scanButton.textContent = 'Start Scanning';
+            resultDiv.textContent = 'Ready to scan';
+        }
+
+        scanButton.addEventListener('click', function() {
+            if (scanning) {
+                stopScanning();
+            } else {
+                startScanning();
+            }
+        });
+    </script>
+</body>
+</html>
